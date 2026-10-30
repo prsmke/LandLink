@@ -51,3 +51,12 @@ insert into public.listings (owner_id, title, location, map_url, price, area_sqm
 ('f1a40a72-d3da-4253-9113-9b10a0ac5e68', '500 sqm Residential Lot', 'Matina, Davao City', 'https://maps.google.com/', 2500000, 500, 'sale', 'Residential', 'A residential lot in a convenient Davao City location.', '{"legal_status":"Clean","title_type":"Clean title","payment_reference":"Full cash"}', null, 'approved'),
 ('f1a40a72-d3da-4253-9113-9b10a0ac5e68', '2 Hectare Farm Land', 'Calinan, Davao City', 'https://maps.google.com/', 15000, 20000, 'lease', 'Agricultural', 'Spacious agricultural property suitable for farming projects.', '{"lease_min_duration":"12 months","lease_max_duration":"60 months","lease_rate":"15000","lease_rate_period":"month","lease_payment":"Monthly, payable in advance","permitted_land_use":"Agriculture","tenant_can_build":"Negotiable","construction_type":"Temporary structures only","security_deposit":"30000","advance_lease":"15000"}', null, 'pending'),
 ('f1a40a72-d3da-4253-9113-9b10a0ac5e68', 'Commercial Lot Along Highway', 'Toril, Davao City', 'https://maps.google.com/', 40000, 300, 'rent', 'Commercial', 'Commercial lot along a major road with potential for a business site.', '{"rental_rate_month":"40000","rental_period":"Minimum 12 months","allowed_uses":"Retail, office, food business"}', null, 'pending');
+
+
+-- ===== Admin permissions fix (listings + image uploads) =====
+drop policy if exists "admin create listing" on public.listings;
+create policy "admin create listing" on public.listings for insert to authenticated with check(public.is_admin());
+drop policy if exists "admin upload property images" on storage.objects;
+create policy "admin upload property images" on storage.objects for insert to authenticated with check(bucket_id='property-images' and public.is_admin());
+drop policy if exists "admin update property images" on storage.objects;
+create policy "admin update property images" on storage.objects for update to authenticated using(bucket_id='property-images' and public.is_admin()) with check(bucket_id='property-images' and public.is_admin());

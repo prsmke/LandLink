@@ -21,4 +21,5 @@
   }catch(e){alert(e.message);return null;}
  };
  window.llLogout=async()=>{if(sb)await sb.auth.signOut();location.href='index.html';};
+window.togglePw=function(btn){const input=btn.previousElementSibling;const isPassword=input.type==='password';input.type=isPassword?'text':'password';const open=btn.querySelector('.eye-open');const closed=btn.querySelector('.eye-closed');if(open)open.style.display=isPassword?'none':'block';if(closed)closed.style.display=isPassword?'block':'none';};
 })();

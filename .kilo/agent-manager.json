@@ -1,14 +1,32 @@
 {
-  "worktrees": {},
-  "sessions": {},
+  "worktrees": {
+    "wt-1793400196331-1": {
+      "branch": "quirky-panther",
+      "path": "c:\\users\\mike\\downloads\\landlink_v2_1_fixed_admin_account\\.kilo\\worktrees\\quirky-panther",
+      "parentBranch": "main",
+      "createdAt": "2026-10-30T22:43:16.331Z",
+      "remote": "origin",
+      "branchOwned": true
+    }
+  },
+  "sessions": {
+    "ses_e7104b058ffeL50HjbMyRpYUdb": {
+      "worktreeId": "wt-1793400196331-1",
+      "createdAt": "2026-10-30T22:58:07.547Z"
+    }
+  },
   "tabOrder": {
     "local": [
-      "pending:212fa6f4-efc6-41f9-94ec-1b3cca29988b"
+      "pending:6dd73408-85ca-4fdf-9876-646d02b6812b"
     ]
   },
+  "worktreeOrder": [
+    "wt-1793400196331-1"
+  ],
   "sessionsCollapsed": true,
   "activeTarget": {
     "projectId": "prj-a2e56b5d4d97",
-    "kind": "local"
+    "kind": "worktree",
+    "worktreeId": "wt-1793400196331-1"
   }
 }

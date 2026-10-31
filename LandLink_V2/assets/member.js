@@ -1,1 +1,265 @@
-﻿(()=>{const $=s=>document.querySelector(s);let me=null,editing=null;const extraFields={sale:`<h3>Sale Details</h3><label>Legal status<select name="legal_status"><option value="">Select</option><option>Clean</option><option>Slight issue</option></select></label><label>Title type<select name="title_type"><option value="">Select</option><option>Clean title</option><option>Tax declaration</option><option>In process</option></select></label><label>Payment reference<select name="payment_reference"><option value="">Select</option><option>Full cash</option><option>Bank financing</option><option>Owner financing</option><option>Installment plan</option></select></label>`,lease:`<h3>Lease Details</h3><label>Minimum lease duration<input name="lease_min_duration" type="number" min="1" placeholder="e.g. 12 months" required></label><label>Maximum lease duration<input name="lease_max_duration" type="number" min="1" placeholder="e.g. 60 months" required></label><label>Lease rate (PHP)<input name="lease_rate" type="number" min="0" required></label><label>Rate period<select name="lease_rate_period"><option>month</option><option>year</option><option>sqm-month</option><option>sqm-year</option></select></label><label>Payment terms<input name="lease_payment" placeholder="e.g. Monthly, quarterly, annual" required></label><label>Permitted land use<input name="permitted_land_use" placeholder="e.g. Agriculture, warehouse, commercial" required></label><label>Can tenant build?<select name="tenant_can_build"><option value="">Select</option><option>Yes</option><option>No</option><option>Negotiable</option></select></label><label>Construction type<select name="construction_type"><option value="">Select</option><option>Temporary structures only</option><option>Permanent construction allowed</option><option>No construction allowed</option><option>Subject to owner approval</option></select></label><label>Security deposit (PHP)<input name="security_deposit" type="number" min="0" required></label><label>Advance lease (PHP)<input name="advance_lease" type="number" min="0" required></label>`,rent:`<h3>Rental Details</h3><label>Monthly rental rate (PHP)<input name="rental_rate_month" type="number"></label><label>Rental period<input name="rental_period" placeholder="e.g. Monthly, 1 year minimum" required></label><label>Allowed uses<input name="allowed_uses" placeholder="e.g. Parking, storage, commercial" required></label>`};function fields(){const k=$('#kind').value;$('#extras').innerHTML=extraFields[k];$('#extras').querySelector('h3').className='wide'}function values(){const f=new FormData($('#property-form')),details={};for(const [k,v] of f.entries())if(!['id','photo','title','location','map_url','price','area_sqm','listing_kind','land_type','description'].includes(k))details[k]=v;return {title:f.get('title'),location:f.get('location'),map_url:f.get('map_url')||null,price:Number(f.get('price')),area_sqm:Number(f.get('area_sqm')),listing_kind:f.get('listing_kind'),land_type:f.get('land_type'),description:f.get('description'),details}}async function load(){const {data,error}=await sb.from('listings').select('*').eq('owner_id',me.id).order('created_at',{ascending:false});if(error)throw error;$('#count-all').textContent=data.length;$('#count-approved').textContent=data.filter(x=>x.status==='approved').length;$('#count-pending').textContent=data.filter(x=>x.status==='pending').length;$('#listing-results').innerHTML=data.map(x=>`<article class="member-item">${x.image_url?`<img src="${llEscape(x.image_url)}">`:''}<h3>${llEscape(x.title)}</h3><p>${llEscape(x.location)}</p><strong>${llMoney(x.price)}</strong><p><small>${llEscape(x.listing_kind)} · ${llEscape(x.land_type)} · ${Number(x.area_sqm||0).toLocaleString()} sqm</small></p><p><span class="status-pill">${llEscape(x.status)}</span></p><div class="actions"><button class="button secondary" data-edit="${x.id}">Edit</button><button class="button secondary" data-delete="${x.id}">Delete</button></div></article>`).join('')||'<p>No listings yet. Add your first property above.</p>';window.myRows=data}async function upload(file){if(!file)return null;if(file.size>8*1024*1024)throw Error('Image must be 8 MB or smaller.');const ext=(file.name.split('.').pop()||'jpg').toLowerCase(),path=`${me.id}/${crypto.randomUUID()}.${ext}`;const {error}=await sb.storage.from('property-images').upload(path,file,{upsert:false,contentType:file.type});if(error)throw error;return sb.storage.from('property-images').getPublicUrl(path).data.publicUrl}async function save(e){e.preventDefault();if($('#kind').value==='lease'){const min=Number($('[name=lease_min_duration]').value),max=Number($('[name=lease_max_duration]').value);if(max<min){$('#form-status').textContent='Maximum lease duration must be equal to or greater than minimum duration.';return}}const status=$('#form-status'),btn=$('#property-form .actions button:not([type=button])');btn.disabled=true;status.textContent='Saving…';try{const v=values(),id=$('[name=id]').value,file=$('[name=photo]').files[0];if(file)v.image_url=await upload(file);if(id){const old=window.myRows.find(x=>x.id===id);if(!v.image_url)v.image_url=old.image_url;v.status='pending';const {error}=await sb.from('listings').update(v).eq('id',id);if(error)throw error}else{v.owner_id=me.id;v.status='pending';const {error}=await sb.from('listings').insert(v);if(error)throw error}}catch(err){status.textContent=err.message;btn.disabled=false;return}status.textContent='Listing saved and submitted for review.';$('#property-form').reset();$('[name=id]').value='';$('#form-heading').textContent='List a Property';fields();await load().catch(()=>{});const myListings=$('#my-listings');if(myListings)myListings.scrollIntoView({behavior:'smooth',block:'nearest'});btn.disabled=false}document.addEventListener('DOMContentLoaded',async()=>{if(!llReady){alert('Configure Supabase in assets/config.js first.');return}try{const session=await llGuard({approved:false});if(!session)return;me=session.user;$('#welcome').textContent='Welcome, '+(session.profile.full_name||me.email);$('#kind').addEventListener('change',fields);fields();$('#property-form').addEventListener('submit',save);$('#reset-form').onclick=()=>{editing=null;$('#property-form').reset();$('[name=id]').value='';$('#form-heading').textContent='List a Property';fields()};$('#listing-results').addEventListener('click',async e=>{const edit=e.target.closest('[data-edit]'),del=e.target.closest('[data-delete]');if(edit){const x=window.myRows.find(r=>r.id===edit.dataset.edit);editing=x;const f=$('#property-form');$('#kind').value=x.listing_kind;fields();for(const [k,v] of Object.entries(x))if(f.elements[k]&&typeof v!=='object')f.elements[k].value=v??'';for(const [k,v] of Object.entries(x.details||{}))if(f.elements[k]){const el=f.elements[k];el.value=el.type==='number'?(parseFloat(v)||''):(v??'')}$('[name=id]').value=x.id;$('#form-heading').textContent='Edit Property';window.scrollTo({top:0,behavior:'smooth'})}if(del&&confirm('Delete this property listing?')){const {error}=await sb.from('listings').delete().eq('id',del.dataset.delete);if(error)alert(error.message);else load()}});await load()}catch(e){alert(e.message)}})})();
+﻿(() => {
+  const $ = (s) => document.querySelector(s);
+  let me = null,
+    editing = null;
+  /**
+   * Open the chat-messenger popup for replying to an inquiry.
+   */
+  function openChatPopup(inquiryId) {
+    const url = "reply.html?inquiry_id=" + encodeURIComponent(inquiryId);
+    const w = 520, h = 680;
+    const left = (window.innerWidth - w) / 2;
+    const top = (window.innerHeight - h) / 2;
+    const popup = window.open(
+      url,
+      "landlink_reply_" + inquiryId,
+      "width=" + w + ",height=" + h + ",left=" + left + ",top=" + top +
+      ",menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes",
+    );
+    if (!popup) {
+      alert("Pop-up blocked. Please allow pop-ups for this site.");
+      return;
+    }
+    popup.focus();
+  }
+  const extraFields = {
+    sale: `<h3>Sale Details</h3><label>Legal status<select name="legal_status"><option value="">Select</option><option>Clean</option><option>Slight issue</option></select></label><label>Title type<select name="title_type"><option value="">Select</option><option>Clean title</option><option>Tax declaration</option><option>In process</option></select></label><label>Payment reference<select name="payment_reference"><option value="">Select</option><option>Full cash</option><option>Bank financing</option><option>Owner financing</option><option>Installment plan</option></select></label>`,
+    lease: `<h3>Lease Details</h3><label>Minimum lease duration<input name="lease_min_duration" type="number" min="1" placeholder="e.g. 12 months" required></label><label>Maximum lease duration<input name="lease_max_duration" type="number" min="1" placeholder="e.g. 60 months" required></label><label>Lease rate (PHP)<input name="lease_rate" type="number" min="0" required></label><label>Rate period<select name="lease_rate_period"><option>month</option><option>year</option><option>sqm-month</option><option>sqm-year</option></select></label><label>Payment terms<input name="lease_payment" placeholder="e.g. Monthly, quarterly, annual" required></label><label>Permitted land use<input name="permitted_land_use" placeholder="e.g. Agriculture, warehouse, commercial" required></label><label>Can tenant build?<select name="tenant_can_build"><option value="">Select</option><option>Yes</option><option>No</option><option>Negotiable</option></select></label><label>Construction type<select name="construction_type"><option value="">Select</option><option>Temporary structures only</option><option>Permanent construction allowed</option><option>No construction allowed</option><option>Subject to owner approval</option></select></label><label>Security deposit (PHP)<input name="security_deposit" type="number" min="0" required></label><label>Advance lease (PHP)<input name="advance_lease" type="number" min="0" required></label>`,
+    rent: `<h3>Rental Details</h3><label>Monthly rental rate (PHP)<input name="rental_rate_month" type="number"></label><label>Rental period<input name="rental_period" placeholder="e.g. Monthly, 1 year minimum" required></label><label>Allowed uses<input name="allowed_uses" placeholder="e.g. Parking, storage, commercial" required></label>`,
+  };
+  function fields() {
+    const k = $("#kind").value;
+    $("#extras").innerHTML = extraFields[k];
+    $("#extras").querySelector("h3").className = "wide";
+  }
+  function values() {
+    const f = new FormData($("#property-form")),
+      details = {};
+    for (const [k, v] of f.entries())
+      if (
+        ![
+          "id",
+          "photo",
+          "title",
+          "location",
+          "map_url",
+          "price",
+          "area_sqm",
+          "listing_kind",
+          "land_type",
+          "description",
+        ].includes(k)
+      )
+        details[k] = v;
+    return {
+      title: f.get("title"),
+      location: f.get("location"),
+      map_url: f.get("map_url") || null,
+      price: Number(f.get("price")),
+      area_sqm: Number(f.get("area_sqm")),
+      listing_kind: f.get("listing_kind"),
+      land_type: f.get("land_type"),
+      description: f.get("description"),
+      details,
+    };
+  }
+  async function loadInquiries() {
+    const container = document.getElementById("inquiry-results");
+    if (!container) return;
+    try {
+      // inquiries has no owner_id column; join through listings to find
+      // inquiries for this owner's approved or pending listings.
+      const { data, error } = await sb
+        .from("inquiries")
+        .select("*, listings(title, location, owner_id)")
+        .eq("listings.owner_id", me.id)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      const items = data || [];
+      if (items.length === 0) {
+        container.innerHTML = '<p style="color:#64748b;">No inquiries yet. When someone is interested in your property, they will appear here.</p>';
+        return;
+      }
+      container.innerHTML = items
+        .map(
+          (x) => `
+            <article class="member-item">
+              <h3>${llEscape(x.subject)}</h3>
+              <p><strong>From:</strong> ${llEscape(x.name)} &lt;${llEscape(x.email)}&gt;${x.phone ? ` · ${llEscape(x.phone)}` : ""}</p>
+              ${x.listings ? `<p><small>Property: ${llEscape(x.listings.title)} (${llEscape(x.listings.location)})</small></p>` : ""}
+              <p>${llEscape(x.message)}</p>
+              <p><span class="status-pill" style="${x.status === "new" ? "background:#dbeae2;color:#176b3d" : ""}">${llEscape(x.status === "new" ? "New" : x.status === "replied" ? "Replied" : x.status)}</span></p>
+              <div class="actions">
+                <button class="button secondary" data-reply="${x.id}">Reply</button>
+                <button class="button secondary" data-delete-inquiry="${x.id}">Delete</button>
+              </div>
+            </article>
+          `,
+        )
+        .join("");
+    } catch (err) {
+      container.innerHTML = `<p style="color:#b00;">${llEscape(err.message)}</p>`;
+    }
+  }
+
+  async function load() {
+    const { data, error } = await sb
+      .from("listings")
+      .select("*")
+      .eq("owner_id", me.id)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    $("#count-all").textContent = data.length;
+    $("#count-approved").textContent = data.filter(
+      (x) => x.status === "approved",
+    ).length;
+    $("#count-pending").textContent = data.filter(
+      (x) => x.status === "pending",
+    ).length;
+    $("#listing-results").innerHTML =
+      data
+        .map(
+          (x) =>
+            `<article class="member-item">${x.image_url ? `<img src="${llEscape(x.image_url)}">` : ""}<h3>${llEscape(x.title)}</h3><p>${llEscape(x.location)}</p><strong>${llMoney(x.price)}</strong><p><small>${llEscape(x.listing_kind)} · ${llEscape(x.land_type)} · ${Number(x.area_sqm || 0).toLocaleString()} sqm</small></p><p><span class="status-pill">${llEscape(x.status)}</span></p><div class="actions"><button class="button secondary" data-edit="${x.id}">Edit</button><button class="button secondary" data-delete="${x.id}">Delete</button></div></article>`,
+        )
+        .join("") || "<p>No listings yet. Add your first property above.</p>";
+    window.myRows = data;
+    await loadInquiries();
+  }
+  async function upload(file) {
+    if (!file) return null;
+    if (file.size > 8 * 1024 * 1024)
+      throw Error("Image must be 8 MB or smaller.");
+    const ext = (file.name.split(".").pop() || "jpg").toLowerCase(),
+      path = `${me.id}/${crypto.randomUUID()}.${ext}`;
+    const { error } = await sb.storage
+      .from("property-images")
+      .upload(path, file, { upsert: false, contentType: file.type });
+    if (error) throw error;
+    return sb.storage.from("property-images").getPublicUrl(path).data.publicUrl;
+  }
+  async function save(e) {
+    e.preventDefault();
+    if ($("#kind").value === "lease") {
+      const min = Number($("[name=lease_min_duration]").value),
+        max = Number($("[name=lease_max_duration]").value);
+      if (max < min) {
+        $("#form-status").textContent =
+          "Maximum lease duration must be equal to or greater than minimum duration.";
+        return;
+      }
+    }
+    const status = $("#form-status"),
+      btn = $("#property-form .actions button:not([type=button])");
+    btn.disabled = true;
+    status.textContent = "Saving…";
+    try {
+      const v = values(),
+        id = $("[name=id]").value,
+        file = $("[name=photo]").files[0];
+      if (file) v.image_url = await upload(file);
+      if (id) {
+        const old = window.myRows.find((x) => x.id === id);
+        if (!v.image_url) v.image_url = old.image_url;
+        v.status = "pending";
+        const { error } = await sb.from("listings").update(v).eq("id", id);
+        if (error) throw error;
+      } else {
+        v.owner_id = me.id;
+        v.status = "pending";
+        const { error } = await sb.from("listings").insert(v);
+        if (error) throw error;
+      }
+    } catch (err) {
+      status.textContent = err.message;
+      btn.disabled = false;
+      return;
+    }
+    status.textContent = "Listing saved and submitted for review.";
+    $("#property-form").reset();
+    $("[name=id]").value = "";
+    $("#form-heading").textContent = "List a Property";
+    fields();
+    await load().catch(() => {});
+    const myListings = $("#my-listings");
+    if (myListings)
+      myListings.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    btn.disabled = false;
+  }
+  document.addEventListener("DOMContentLoaded", async () => {
+    if (!llReady) {
+      alert("Configure Supabase in assets/config.js first.");
+      return;
+    }
+    try {
+      const session = await llGuard({ approved: false });
+      if (!session) return;
+      me = session.user;
+      $("#welcome").textContent =
+        "Welcome, " + (session.profile.full_name || me.email);
+      $("#kind").addEventListener("change", fields);
+      fields();
+      $("#property-form").addEventListener("submit", save);
+      $("#reset-form").onclick = () => {
+        editing = null;
+        $("#property-form").reset();
+        $("[name=id]").value = "";
+        $("#form-heading").textContent = "List a Property";
+        fields();
+      };
+      $("#listing-results").addEventListener("click", async (e) => {
+        const edit = e.target.closest("[data-edit]"),
+          del = e.target.closest("[data-delete]");
+        if (edit) {
+          const x = window.myRows.find((r) => r.id === edit.dataset.edit);
+          editing = x;
+          const f = $("#property-form");
+          $("#kind").value = x.listing_kind;
+          fields();
+          for (const [k, v] of Object.entries(x))
+            if (f.elements[k] && typeof v !== "object")
+              f.elements[k].value = v ?? "";
+          for (const [k, v] of Object.entries(x.details || {}))
+            if (f.elements[k]) {
+              const el = f.elements[k];
+              el.value = el.type === "number" ? parseFloat(v) || "" : (v ?? "");
+            }
+          $("[name=id]").value = x.id;
+          $("#form-heading").textContent = "Edit Property";
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }
+        if (del && confirm("Delete this property listing?")) {
+          const { error } = await sb
+            .from("listings")
+            .delete()
+            .eq("id", del.dataset.delete);
+          if (error) alert(error.message);
+          else load();
+        }
+      });
+      $("#inquiry-results").addEventListener("click", async (e) => {
+        const reply = e.target.closest("[data-reply]"),
+          delInq = e.target.closest("[data-delete-inquiry]");
+        if (reply) {
+          openChatPopup(reply.dataset.reply);
+          return;
+        }
+        if (delInq && confirm("Delete this inquiry?")) {
+          try {
+            const { error } = await sb
+              .from("inquiries")
+              .delete()
+              .eq("id", delInq.dataset.deleteInquiry);
+            if (error) throw error;
+            await loadInquiries();
+          } catch (err) {
+            alert(err.message);
+          }
+        }
+      });
+      await load();
+    } catch (e) {
+      alert(e.message);
+    }
+  });
+})();
